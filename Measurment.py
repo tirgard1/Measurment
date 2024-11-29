@@ -214,10 +214,10 @@ class Lorentz:
         if self.x == []:
             return
         bounds = [(0, max(self.ampl_square)), 
-                (8.125e+6, 8.165e+6), 
+                (min(self.freq), max(self.freq)), 
                 (0, 5000), 
                 (-1e+11, 1e+11), 
-                (0, np.mean(self.ampl_square))]
+                (0, max(self.ampl_square))]
         
         result = optimize.differential_evolution(self.error, 
                                                 bounds, 
