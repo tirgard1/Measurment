@@ -7,6 +7,9 @@ from scipy import signal
 import scipy.ndimage
 import scipy.signal
 import os
+import sympy
+import sympy.plotting
+from sympy.plotting.plot import List2DSeries
 
 def lorentzian(params, x, y):
         ampl, freq, wid, alpha, var = params
@@ -196,14 +199,14 @@ class Lorentz:
         y_noise_mean_square = np.mean([y**2 for y in y_noise])#np.max(y_noise)
         return x_noise_mean_square + y_noise_mean_square
 
-    def calc_fit(self, f):
-        # Solve for y values using fsolve   
-        y_values = []
-        for xx in f:
-            # Use fsolve to find the root for y for each x
-            y_solution = optimize.fsolve(equation, 1e-8, args=(xx, self.params))  # Starting guess for y is 1
-            y_values.append(y_solution[0])  # Store the solution for y
-        return y_values
+    # def calc_fit(self, f):
+    #     # Solve for y values using fsolve   
+    #     y_values = []
+    #     for xx in f:
+    #         # Use fsolve to find the root for y for each x
+    #         y_solution = optimize.fsolve(equation, 1e-8, args=(xx, self.params))  # Starting guess for y is 1
+    #         y_values.append(y_solution[0])  # Store the solution for y
+    #     return y_values
 
     def error(self, params, x, y):
         ampl, freq, wid, alpha, var = params
@@ -217,7 +220,7 @@ class Lorentz:
                 (min(self.freq), max(self.freq)), 
                 (0, 5000), 
                 (-1e+11, 1e+11), 
-                (0, max(self.ampl_square))]
+                (0, np.mean(self.ampl_square))]
         
         result = optimize.differential_evolution(self.error, 
                                                 bounds, 
@@ -234,7 +237,7 @@ class Lorentz:
         self.alpha = self.params[3]
         self.variance = self.params[4]
         self.q = self.params[1]/self.params[2]/2
-        self.ampl_fit = self.calc_fit(self.freq)
+        # self.ampl_fit = self.calc_fit(self.freq)
         # self.ampl_fit = [self.lorentzian(f, self.resonant_amplitude,
         #                             self.resonant_freq,
         #                             self.width, 
@@ -259,10 +262,18 @@ class Lorentz:
         # axis[2].set_title("Amplitude square")
         # axis[2].plot(self.freq, self.ampl_square)
         # axis[2].plot(self.freq, self.ampl_fit)
-        plt.plot(self.freq, self.ampl_square)
-        plt.plot(self.freq, self.ampl_fit)
-        plt.title(f"{self.alpha*1e-10} 10^10")
-        plt.show()
+        # plt.plot(self.freq, self.ampl_square)
+        # plt.plot(self.freq, self.ampl_fit)
+        # plt.title(f"{self.alpha*1e-10} 10^10")
+        # plt.show()
+        
+        ampl1, freq, wid, alpha, var = self.params
+        x, y = sympy.symbols('x y')
+        p1 = sympy.plot_implicit(sympy.Eq(y - (ampl1 * wid**2) / ((x - freq - alpha*y)**2 + wid**2) - var, 0), (x, min(self.freq), max(self.freq)), (y, 0, max(self.ampl_square)), show=False, title=f"V = {self.v}")
+        p1.append(List2DSeries(self.freq, self.ampl_square))
+        p1
+        p1.show()
+        pass
     
     def save(self, filename = "Curves"):
         figure, axis = plt.subplots(1, 3)
