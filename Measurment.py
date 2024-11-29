@@ -2,10 +2,19 @@ import csv
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy as scipy
+from scipy import optimize
 from scipy import signal
 import scipy.ndimage
 import scipy.signal
 import os
+
+def lorentzian(params, x, y):
+        ampl, freq, wid, alpha, var = params
+        return y - (ampl * wid**2) / ((x - freq - alpha*y)**2 + wid**2) - var
+
+def equation(y, x, params):
+    ampl, freq, wid, alpha, var = params
+    return y - (ampl * wid**2) / ((x - freq - alpha*y)**2 + wid**2) - var
 
 class Measurment:
     def __init__(self, filename : str):
@@ -142,9 +151,8 @@ class Lorentz:
                 self.r = i
                 return
             
-            
-    def lorentzian(self, x, amp, freq, wid, var):
-        return amp*wid**2/((x-freq)**2+wid**2) + var
+    # def lorentzian(self, x, amp, freq, wid, var):
+    #     return amp*wid**2/((x-freq)**2+wid**2) + var
 
     def remove_slope(self, x, y):
         if x == []: return y
@@ -188,22 +196,49 @@ class Lorentz:
         y_noise_mean_square = np.mean([y**2 for y in y_noise])#np.max(y_noise)
         return x_noise_mean_square + y_noise_mean_square
 
+    def calc_fit(self, f):
+        # Solve for y values using fsolve   
+        y_values = []
+        for xx in f:
+            # Use fsolve to find the root for y for each x
+            y_solution = optimize.fsolve(equation, 1e-8, args=(xx, self.params))  # Starting guess for y is 1
+            y_values.append(y_solution[0])  # Store the solution for y
+        return y_values
+
+    def error(self, params, x, y):
+        ampl, freq, wid, alpha, var = params
+        error_values = np.abs(lorentzian(params, x, y))
+        return np.sum(error_values)
+
     def fit(self):
         if self.x == []:
             return
-        try:
-            popt, pcov_lorentzian = scipy.optimize.curve_fit(self.lorentzian, self.freq, self.ampl_square, p0=[max(self.ampl_square), self.freq[self.ampl_square.index(max(self.ampl_square))], 1000, self.calc_variance()])
-        except:
-            popt = [max(self.ampl_square), self.freq[self.ampl_square.index(max(self.ampl_square))], 1000, self.calc_variance()]
-        self.resonant_amplitude = popt[0] - popt[3]
-        self.resonant_freq = popt[1]
-        self.width = popt[2]
-        self.variance = popt[3]
-        self.q = popt[1]/popt[2]/2
-        self.ampl_fit = [self.lorentzian(f, self.resonant_amplitude,
-                                    self.resonant_freq,
-                                    self.width, 
-                                    self.variance) for f in self.freq]
+        bounds = [(0, max(self.ampl_square)), 
+                (8.125e+6, 8.165e+6), 
+                (0, 5000), 
+                (-1e+11, 1e+11), 
+                (0, np.mean(self.ampl_square))]
+        
+        result = optimize.differential_evolution(self.error, 
+                                                bounds, 
+                                                args=(np.array(self.freq), 
+                                                np.array(self.ampl_square)), 
+                                                maxiter=1000, 
+                                                popsize=20)
+
+        self.params = result.x
+
+        self.resonant_amplitude = self.params[0] - self.params[4]
+        self.resonant_freq = self.params[1]
+        self.width = self.params[2]
+        self.alpha = self.params[3]
+        self.variance = self.params[4]
+        self.q = self.params[1]/self.params[2]/2
+        self.ampl_fit = self.calc_fit(self.freq)
+        # self.ampl_fit = [self.lorentzian(f, self.resonant_amplitude,
+        #                             self.resonant_freq,
+        #                             self.width, 
+        #                             self.variance) for f in self.freq]
         
     def calculate(self):
         self.find_r()
@@ -215,15 +250,18 @@ class Lorentz:
 
     #TODO: мб сохранение в файл
     def plot(self):
-        figure, axis = plt.subplots(1, 3)
-        figure.suptitle(f"V = {self.v}")
-        axis[0].plot(self.freq, self.x)
-        axis[0].set_title("X")
-        axis[1].plot(self.freq, self.y)
-        axis[1].set_title("Y")
-        axis[2].set_title("Amplitude square")
-        axis[2].plot(self.freq, self.ampl_square)
-        axis[2].plot(self.freq, self.ampl_fit)
+        # figure, axis = plt.subplots(1, 3)
+        # figure.suptitle(f"V = {self.v}")
+        # axis[0].plot(self.freq, self.x)
+        # axis[0].set_title("X")
+        # axis[1].plot(self.freq, self.y)
+        # axis[1].set_title("Y")
+        # axis[2].set_title("Amplitude square")
+        # axis[2].plot(self.freq, self.ampl_square)
+        # axis[2].plot(self.freq, self.ampl_fit)
+        plt.plot(self.freq, self.ampl_square)
+        plt.plot(self.freq, self.ampl_fit)
+        plt.title(f"{self.alpha*1e-10} 10^10")
         plt.show()
     
     def save(self, filename = "Curves"):
@@ -247,10 +285,12 @@ class Lorentz:
     ampl = []
     ampl_square = []
     ampl_fit = []
+    params = []
     resonant_amplitude = 0
     resonant_freq = 0
     width = 0
     q = 0
+    alpha = 0
     variance = 0
 
     pass
